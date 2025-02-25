@@ -10,12 +10,12 @@ warnings.filterwarnings("ignore")
 
 class QLearningAgent:
     def __init__(self, actions, learning_rate=0.1, discount_factor=0.9, epsilon=0.1, q_table_file="q_table.pkl"):
-        self.actions = actions  # action space
-        self.lr = learning_rate  # learning_rate
-        self.gamma = discount_factor  # discount_factor
-        self.epsilon = epsilon  # epsilon
-        self.q_table = {}  # q_table
-        self.q_table_file = q_table_file  # Q表保存文件
+        self.actions = actions  # Action space
+        self.lr = learning_rate  # Learning rate
+        self.gamma = discount_factor  # Discount factor
+        self.epsilon = epsilon  # Exploration rate
+        self.q_table = {}  # Q-table, stored as a dictionary
+        self.q_table_file = q_table_file  # File to save the Q-table
         self.load_q_table()
 
     def save_q_table(self):
@@ -33,7 +33,7 @@ class QLearningAgent:
 
     def get_state(self, player, enemy_bullets, enemies):
         def discretize(value, step=10):
-            return value // step  # 将距离离散化
+            return value // step  
 
         if enemy_bullets:
             closest_bullet = min(enemy_bullets, key=lambda b: abs(b.rect.top - player.rect.top))
@@ -111,12 +111,11 @@ class Player(pygame.sprite.Sprite):
                     self.rect.top -= self.speed  
                 else:  
                     self.rect.top += self.speed 
-        elif self.current_action == "CHASE":  # 追踪敌机
+        elif self.current_action == "CHASE":  # chase enemy
             if enemies:
-                # 找到与战机的 y 坐标最接近的敌机
+                # Find the enemy aircraft closest to the y-coordinate of the fighter.
                 closest_enemy = min(enemies, key=lambda e: abs(e.rect.bottom - self.rect.top))
                 
-                # 如果 x 坐标差距小于速度，直接对齐
                 if abs(self.rect.left - closest_enemy.rect.left) <= self.speed:
                     self.rect.left = closest_enemy.rect.left
                 elif self.rect.left < closest_enemy.rect.left:
@@ -144,15 +143,14 @@ class Player(pygame.sprite.Sprite):
             self.last_shot_time = current_time
 
     def update(self, enemy_bullets, enemies, reward):
-        # 确保 reward 是数值类型
         if not isinstance(reward, (int, float)):
             raise ValueError(f"Reward must be a number, got {type(reward)} instead.")
 
-        self.auto_control(enemy_bullets, enemies)  # 传入敌机信息
+        self.auto_control(enemy_bullets, enemies)  
         self.auto_fire()
         self.display()
 
-        # 更新 Q 表
+        # update q table
         next_state = self.agent.get_state(self, enemy_bullets, enemies)
         self.agent.learn(self.agent.get_state(self, enemy_bullets, enemies), self.current_action, reward, next_state)
 
@@ -398,90 +396,85 @@ class Manager:
         :param episodes: Number of training episodes.
         :param max_steps: Maximum steps per episode.
         """
-        # 初始化 Q 表
+        # Initialize the Q table
         self.agent.load_q_table()
 
         for episode in range(episodes):
-            # 重置游戏环境
+            # Reset game environment
             self.reset_game()
             # self.new_player()
             pygame.time.set_timer(Manager.create_enemy_id, 1000)
 
-            # 初始化状态
             player = self.players.sprites()[0]
             state = self.agent.get_state(player, self.enemies, Enemy.enemy_bullets)
             total_reward = 0
 
             for step in range(max_steps):
-                # 自动移动地图
                 self.map.move()
                 self.map.draw()
 
-                # 显示当前得分
                 self.drawText(f'Episode: {episode + 1}/{episodes}', 0, 0)
                 self.drawText(f'Score: {Manager.score}', 0, 30)
 
-                reward = 0  # 初始化奖励
-                safe_distance = 40  # 初始化安全距离
+                reward = 0 
+                safe_distance = 40  
 
-                # 生成敌机
+                # generate enemy
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
-                        # 保存 Q 表
+                        # save the q table
                         self.agent.save_q_table()
                         self.exit()
                     elif event.type == Manager.create_enemy_id:
                         self.new_enemy()
 
-                # 玩家选择动作（根据 Q 表或随机探索）
                 action = self.agent.choose_action(state)
 
-                # 执行动作
-                if action == 0:  # 向上移动
+                
+                if action == 0: 
                     player.move_up()
-                elif action == 1:  # 向下移动
+                elif action == 1:  
                     player.move_down()
-                elif action == 2:  # 向左移动
+                elif action == 2:  
                     player.move_left()
-                elif action == 3:  # 向右移动
+                elif action == 3: 
                     player.move_right()
-                elif action == 4:  # 发射子弹
+                elif action == 4:  
                     player.shoot()
 
-                # 更新奖励机制
-                # 检查玩家与子弹的距离
+               
                 if Enemy.enemy_bullets:
                     closest_bullet = min(Enemy.enemy_bullets, key=lambda b: abs(b.rect.top - player.rect.top))
                     distance_x = abs(player.rect.left - closest_bullet.rect.left)
                     distance_y = abs(player.rect.top - closest_bullet.rect.top)
 
-                    if distance_x < safe_distance and distance_y < safe_distance:  # 距离太近
-                        reward -= 10  # 惩罚
+                    if distance_x < safe_distance and distance_y < safe_distance:  
+                        reward -= 10 
                     else:
-                        reward += 2  # 保持距离奖励
+                        reward += 2  
 
-                # 击中敌机的奖励
+                # Rewards for hitting enemy aircraft
                 is_enemy = pygame.sprite.groupcollide(Player.bullets, self.enemies, True, False)
                 if is_enemy:
-                    reward += 50  # 击中敌机的基础奖励
+                    reward += 50  
                     for bullet, enemies in is_enemy.items():
                         for enemy in enemies:
                             self.enemy_bomb.action(enemy.rect)
                             self.sound.play_bomb()
                             Manager.score += 10
                             self.enemies.remove(enemy)
-                            reward += 5  # 额外奖励，鼓励持续攻击
+                            reward += 5  # Extra incentives to encourage sustained attacks
 
-                # 检查玩家与敌机的距离
+                # Check the distance between the player and the enemy aircraft
                 if self.enemies:
                     closest_enemy = min(self.enemies, key=lambda e: abs(e.rect.top - player.rect.top))
                     distance_to_enemy = abs(player.rect.top - closest_enemy.rect.top)
-                    if distance_to_enemy < safe_distance:  # 靠近敌机
-                        reward += 1  # 鼓励靠近敌机
+                    if distance_to_enemy < safe_distance:  
+                        reward += 1  
                     else:
-                        reward -= 0.5  # 远离敌机的轻微惩罚
+                        reward -= 0.5  
 
-                # 被敌机子弹击中的惩罚
+                # Penalty for being hit by enemy aircraft bullets
                 if player.rect.top > 5 and player.rect.bottom < 695:
                     isover = pygame.sprite.spritecollide(player, Enemy.enemy_bullets, True)
                     if isover:
@@ -491,35 +484,32 @@ class Manager:
                         self.player_bomb.action(player.rect)
                         self.players.remove(player)
                         self.sound.play_bomb()
-                        break  # 本轮训练结束
+                        break  
 
-                # 计算下一状态
+                # Calculate the next state
                 next_state = self.agent.get_state(player, self.enemies, Enemy.enemy_bullets)
 
-                # 更新 Q 表
+                # update the next state
                 self.agent.learn(state, action, reward, next_state)
 
-                # 更新当前状态
+                # Update the current state 
                 state = next_state
 
-                # 累计奖励
+                # Cumulative rewards
                 total_reward += reward
 
-                # 更新玩家和敌机
+                # Updating players and enemy aircraft
                 self.players.update(Enemy.enemy_bullets, self.enemies, reward)
                 self.enemies.update()
 
-                # 动态调整探索率
+                # Dynamic adjustment of the exploration rate
                 self.agent.update_epsilon()
 
-                # # 刷新屏幕
                 # pygame.display.update()
                 # time.sleep(0.01)
 
-            # 打印每轮训练的结果
             print(f'Episode {episode + 1}/{episodes} ended with total reward: {total_reward}, score: {Manager.score}')
 
-            # 保存 Q 表
             self.agent.save_q_table()
 
         print("Training completed and Q-table saved!")
@@ -577,39 +567,38 @@ class Manager:
                 Manager.is_game_over = True
                 pygame.time.set_timer(Manager.game_over_id, 1000)
 
-            # 检查玩家与子弹的距离
             if Enemy.enemy_bullets:
                 closest_bullet = min(Enemy.enemy_bullets, key=lambda b: abs(b.rect.top - player.rect.top))
                 distance_x = abs(player.rect.left - closest_bullet.rect.left)
                 distance_y = abs(player.rect.top - closest_bullet.rect.top)
 
-                if distance_x < safe_distance and distance_y < safe_distance:  # 距离太近
-                    reward -= 10  # 惩罚
+                if distance_x < safe_distance and distance_y < safe_distance:
+                    reward -= 10
                 else:
-                    reward += 2  # 保持距离奖励
+                    reward += 2 
 
-            # 击中敌机的奖励
+
             is_enemy = pygame.sprite.groupcollide(Player.bullets, self.enemies, True, False)
             if is_enemy:
-                reward += 50  # 击中敌机的基础奖励
+                reward += 50  
                 for bullet, enemies in is_enemy.items():
                     for enemy in enemies:
                         self.enemy_bomb.action(enemy.rect)
                         self.sound.play_bomb()
                         Manager.score += 10
                         self.enemies.remove(enemy)
-                        reward += 5  # 额外奖励，鼓励持续攻击
+                        reward += 5  
 
-            # 检查玩家与敌机的距离
+        
             if self.enemies:
                 closest_enemy = min(self.enemies, key=lambda e: abs(e.rect.top - player.rect.top))
                 distance_to_enemy = abs(player.rect.top - closest_enemy.rect.top)
-                if distance_to_enemy < safe_distance:  # 靠近敌机
-                    reward += 2  # 鼓励靠近敌机
+                if distance_to_enemy < safe_distance:  
+                    reward += 2  
                 else:
-                    reward -= 1  # 远离敌机的轻微惩罚
+                    reward -= 1
 
-            # 被敌机子弹击中的惩罚
+          
             if player.rect.top > 5 and player.rect.bottom < 695:
                 isover = pygame.sprite.spritecollide(player, Enemy.enemy_bullets, True)
                 if isover:
@@ -642,20 +631,20 @@ class Manager:
                     pygame.display.update()
                     time.sleep(0.01)
                     
-            self.players.update(Enemy.enemy_bullets, self.enemies, reward)  # 修改为传入敌方子弹
+            self.players.update(Enemy.enemy_bullets, self.enemies, reward) 
             self.enemies.update()
-            self.agent.update_epsilon()  # 动态调整探索率
+            self.agent.update_epsilon()
             pygame.display.update()
             time.sleep(0.01)
 
 
 if __name__ == "__main__":
     manager = Manager()
-    # 选择训练还是运行游戏
+    # Choose whether to train or run the game
     mode = input("Enter 'train' to train AI or 'play' to test AI: ").strip().lower()
     if mode == "train":
-        manager.train(episodes=100, max_steps=1000)  # 训练1000次
+        manager.train(episodes=100, max_steps=1000)  # train 1000 times
     elif mode == "play":
-        manager.main()  # 运行游戏界面
+        manager.main() 
     else:
         print("Invalid mode. Please enter 'train' or 'play'.")
